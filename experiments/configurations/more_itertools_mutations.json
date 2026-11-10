@@ -1,0 +1,16 @@
+{
+  "mutations": [
+    {
+      "id": "last-returns-first",
+      "path": "more_itertools/more.py",
+      "before": "return iterable[-1]",
+      "after": "return iterable[0]"
+    },
+    {
+      "id": "first-true-ignores-predicate",
+      "path": "more_itertools/recipes.py",
+      "before": "return next(filter(pred, iterable), default)",
+      "after": "return next(iter(iterable), default)"
+    }
+  ]
+}

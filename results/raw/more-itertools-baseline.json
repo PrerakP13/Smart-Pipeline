@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "base": "8927b5ccc52a16dfaca74af899acad43fd1679de",
+  "environment": {
+    "timestamp_utc": "2026-11-10T23:30:52.184266+00:00",
+    "python": "3.12.14",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "coverage": "7.10.7",
+    "pytest": "8.4.2"
+  },
+  "test_count": 660,
+  "baseline_seconds": 7.838589763999607,
+  "mapped_python_files": 6
+}

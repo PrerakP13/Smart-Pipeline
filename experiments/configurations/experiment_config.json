@@ -1,0 +1,22 @@
+{
+  "mutations": [
+    {
+      "id": "ansi-wrong-style-terminator",
+      "path": "colorama/ansi.py",
+      "before": "return CSI + str(code) + 'm'",
+      "after": "return CSI + str(code) + 'n'"
+    },
+    {
+      "id": "ansi-wrong-erase-default",
+      "path": "colorama/ansitowin32.py",
+      "before": "params = (0,)",
+      "after": "params = (1,)"
+    },
+    {
+      "id": "cursor-up-moves-down",
+      "path": "colorama/ansi.py",
+      "before": "return CSI + str(n) + 'A'",
+      "after": "return CSI + str(n) + 'B'"
+    }
+  ]
+}
