@@ -1,2 +1,9 @@
+GitPython
+coverage
+pytest-cov
 coverage==7.10.7
 pytest==8.4.2
+pandas
+sqlalchemy
+psycopg2-binary
+python-dotenv
