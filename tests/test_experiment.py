@@ -5,6 +5,10 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
+from experiments.run_experiment import baseline, compare
+
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -82,6 +86,13 @@ def test_commit_comparison_reuses_baseline_and_preserves_dirty_checkout(tmp_path
         assert run["failed"] == [failure]
         assert run["metrics"]["failure_retention_pct"] == 100
         assert run["metrics"]["missed_failures"] == []
+        metrics = run["metrics"]
+        assert metrics["selected_total_seconds"] == pytest.approx(
+            metrics["selected_run_seconds"] + metrics["selection_seconds"]
+        )
+    assert report["comparison_seconds"] >= report["full"]["duration"] + sum(
+        run["duration"] for run in report["strategies"].values()
+    )
 
     selective = cli("run", repo, base, db, "--target", target, "--strategy", "line")
     assert selective.returncode == 1
@@ -89,6 +100,7 @@ def test_commit_comparison_reuses_baseline_and_preserves_dirty_checkout(tmp_path
     assert set(run["selected"]) == {failure, new_test}
     assert run["failed"] == [failure]
     assert "full" not in run
+    assert run["total_seconds"] == pytest.approx(run["duration"] + run["selection_seconds"])
 
     missing = cli("compare", repo, target, db, "--target", target)
     assert missing.returncode != 0
@@ -98,3 +110,25 @@ def test_commit_comparison_reuses_baseline_and_preserves_dirty_checkout(tmp_path
     assert git(repo, "ls-files", "--stage") == index_before
     assert git(repo, "rev-parse", "HEAD").decode().strip() == target
     assert source.read_text() == dirty
+
+
+def test_comparison_rejects_inventory_that_changes_between_fresh_processes(tmp_path):
+    repo = tmp_path / "unstable"
+    repo.mkdir()
+    counter = tmp_path / "collection-counter.txt"
+    (repo / "test_dynamic.py").write_text(
+        "from pathlib import Path\nimport pytest\n"
+        f"counter = Path({str(counter)!r})\n"
+        "value = int(counter.read_text()) + 1 if counter.exists() else 1\n"
+        "counter.write_text(str(value))\n"
+        "@pytest.mark.parametrize('case', [value])\n"
+        "def test_case(case): assert case > 0\n"
+    )
+    git(repo, "init", "-q")
+    git(repo, "add", ".")
+    git(repo, "-c", "user.name=Tester", "-c", "user.email=test@example.invalid",
+        "commit", "-qm", "dynamic inventory")
+    db = tmp_path / "map.sqlite"
+    baseline(repo, "HEAD", db)
+    with pytest.raises(RuntimeError, match="inventory differs from full run"):
+        compare(repo, "HEAD", db)

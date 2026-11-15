@@ -18,6 +18,7 @@ import subprocess
 import sqlite3
 import sys
 from pathlib import Path
+from time import perf_counter
 
 from experiments.run_experiment import baseline, checkout, compare, write_json
 from src.change_detector import resolve_commit
@@ -104,6 +105,7 @@ def summarize(trials: list[dict]) -> dict:
 
 
 def run_campaign(repo: Path, base: str, db: Path, config: Path) -> dict:
+    started = perf_counter()
     mutations = read_mutations(config)
     repo = repo.resolve()
     db = db.resolve()
@@ -129,7 +131,8 @@ def run_campaign(repo: Path, base: str, db: Path, config: Path) -> dict:
             # Includes collection failures. Only actual test failures count as kills.
             trial.update(outcomes=dict.fromkeys(STRATEGIES, "infrastructure_error"), error=str(error))
         trials.append(trial)
-    return {"base_commit": commit, "control": control, "trials": trials, "summary": summarize(trials)}
+    return {"base_commit": commit, "control": control, "trials": trials,
+            "summary": summarize(trials), "campaign_seconds": perf_counter() - started}
 
 
 def main() -> int:

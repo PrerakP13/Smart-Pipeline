@@ -1,10 +1,14 @@
 """Select current pytest node IDs using coverage from the baseline revision."""
 
+from __future__ import annotations
+
 from collections.abc import Iterable
 from pathlib import PurePosixPath
+from typing import TYPE_CHECKING
 
-from .change_detector import Change
-from .test_mapper import CoverageMap, SharedLines
+if TYPE_CHECKING:
+    from .change_detector import Change
+    from .test_mapper import CoverageMap, SharedLines
 
 
 def _documentation(filename: str) -> bool:

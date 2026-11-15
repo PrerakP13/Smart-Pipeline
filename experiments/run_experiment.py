@@ -19,8 +19,7 @@ from src.change_detector import detect_changes, git_root, resolve_commit
 from src.coverage_analyzer import capture_coverage
 from src.evaluator import evaluate
 from src.test_mapper import CAPTURE_VERSION, load_map, save_map
-from src.test_runner import collect_tests, run_tests
-from src.test_selector import select_tests
+from src.test_runner import run_selection, run_tests
 
 
 @contextmanager
@@ -94,35 +93,27 @@ def _prepare(repo, base, db):
     sha = resolve_commit(root, base)
     mapping, shared = load_map(db, sha)
     changes = detect_changes(root, sha)
-    current = collect_tests(root)
-    return root, sha, mapping, shared, changes, current, perf_counter() - start
-
-
-def _select(strategy, mapping, shared, changes, current, common_seconds):
-    start = perf_counter()
-    nodes = select_tests(changes, mapping, shared, current, strategy=strategy)
-    return nodes, common_seconds + (perf_counter() - start)
+    return root, sha, mapping, shared, changes, perf_counter() - start
 
 
 def run_selected(repo: Path, base: str, db: Path, strategy: str) -> dict:
     """Perform a normal RTS run without running the benchmark suite."""
-    root, sha, mapping, shared, changes, current, common = _prepare(repo, base, db)
-    nodes, selection_seconds = _select(strategy, mapping, shared, changes, current, common)
-    selected = run_tests(root, nodes)
+    root, sha, mapping, shared, changes, common = _prepare(repo, base, db)
+    selected = run_selection(root, mapping, shared, changes, strategy)
+    selection_seconds = common + selected.selection_seconds
     return {"schema_version": 1, "base": sha, "target_head": resolve_commit(root, "HEAD"),
-            "strategy": strategy, "available": len(current), "selected": sorted(nodes),
-            "selection_seconds": selection_seconds, **_summary(selected)}
+            "strategy": strategy, "available": len(selected.available),
+            "selected": sorted(selected.selected), "selection_seconds": selection_seconds,
+            "total_seconds": selection_seconds + selected.run.duration,
+            **_summary(selected.run)}
 
 
 def compare(repo: Path, base: str, db: Path, strategies=("file", "line")) -> dict:
     """Benchmark one target tree. Both selection paths pay the common preparation cost."""
-    root, sha, mapping, shared, changes, current, common_seconds = _prepare(repo, base, db)
-    plans = {strategy: _select(strategy, mapping, shared, changes, current, common_seconds)
-             for strategy in strategies}
+    started = perf_counter()
+    root, sha, mapping, shared, changes, common_seconds = _prepare(repo, base, db)
 
     full = run_tests(root)
-    if set(full.outcomes) != set(current):
-        raise RuntimeError("Full-run inventory differs from target collection. Check for unstable test IDs or early exit.")
     result = {
         "schema_version": 1, "base": sha, "target_head": resolve_commit(root, "HEAD"),
         "environment": environment(), "changes": [
@@ -131,14 +122,18 @@ def compare(repo: Path, base: str, db: Path, strategies=("file", "line")) -> dic
             for c in changes
         ], "common_selection_seconds": common_seconds, "full": _summary(full), "strategies": {},
     }
-    for strategy, (nodes, seconds) in plans.items():
-        selected = run_tests(root, nodes)
-        if set(selected.outcomes) != set(nodes):
-            raise RuntimeError(f"{strategy} run did not report every selected node ID.")
+    for strategy in strategies:
+        selected = run_selection(root, mapping, shared, changes, strategy)
+        if selected.available != full.executed:
+            raise RuntimeError(
+                f"{strategy} inventory differs from full run. Check for unstable test IDs or early exit."
+            )
+        seconds = common_seconds + selected.selection_seconds
         result["strategies"][strategy] = {
-            **_summary(selected), "selected": sorted(nodes),
-            "metrics": evaluate(full, selected, seconds),
+            **_summary(selected.run), "selected": sorted(selected.selected),
+            "metrics": evaluate(full, selected.run, seconds),
         }
+    result["comparison_seconds"] = perf_counter() - started
     return result
 
 

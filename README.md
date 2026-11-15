@@ -32,7 +32,9 @@ Open `.testmind/comparison.json`. Under `strategies.line`, `selected` lists the 
 
 Omit `--target` on `run` or `compare` to inspect the subject's current working tree. Include the subject's test dependencies in the active environment. Keep generated maps and reports outside the subject or in an ignored directory. The selector reads Git changes across all nonignored paths.
 
-Python subprocesses now contribute coverage to the test that launched them. **Rebuild old baselines after updating:** older snapshots omit these dependencies and are rejected rather than silently reused. Supported children must use the same Python environment, inherit coverage variables, and finish normally. The collector temporarily installs coverage.py's startup hook in the active virtual environment; its coverage configuration and data files live outside the subject. See the [coverage limits](docs/algorithm.md#limits).
+Each selected run discovers the target's current tests, selects items and executes them in one fresh pytest process. This removes the separate collect-only process while preserving new-test discovery and the existing selection rules. Startup and collection are charged once, including when selection is empty. Fewer selected tests can still take longer than the full suite.
+
+Python subprocesses contribute coverage to the test that launched them. **Rebuild baselines captured before subprocess support:** those snapshots omit these dependencies and are rejected rather than silently reused. The efficient runner continues to use collector version 2, so existing version-2 snapshots remain compatible. Supported children must use the same Python environment, inherit coverage variables, and finish normally. The collector temporarily installs coverage.py's startup hook in the active virtual environment; its coverage configuration and data files live outside the subject. See the [coverage limits](docs/algorithm.md#limits).
 
 ## ETL Customer regression checks
 
@@ -50,9 +52,11 @@ etl_results=$(mktemp -d)
 
 This captures the full passing control and applies each intentional fault in a separate temporary checkout. The original ETL files are preserved. `summary` reports whether each strategy detects each fault; individual `trials[].comparison.strategies` also report missed failing tests and total selective time. Intentional test failures are expected. An experiment can detect a fault while still missing another failing test, and it can reduce test counts without saving time.
 
+For one strategy, use `metrics.selected_total_seconds` in a comparison or `total_seconds` in a `run` report. These include Git and map preparation, selection, pytest startup, collection and execution. `comparison_seconds` measures preparation plus the full run and every requested strategy; it excludes baseline capture and creation of an outer target checkout. `campaign_seconds` includes the baseline, temporary checkouts and all mutation trials. These measurements end before the final JSON report is written. See the [timing definitions](docs/experiment-plan.md) before comparing strategy costs with an entire experiment's duration.
+
 ## Reference results
 
-For the historical more-itertools change, line selection ran 4 of 660 pytest items. File selection ran 538. In the separate mutation experiments, both strategies detected all four faults that the full suites detected. One Colorama mutation survived the full suite. Timings and applicability are discussed in the [pilot results](docs/research-notes.md).
+For the historical more-itertools change, line selection ran 4 of 660 pytest items. File selection ran 538. In the separate mutation experiments, both strategies detected all four faults that the full suites detected. One Colorama mutation survived the full suite. Those historical timings describe the runner used for the pilot; rerun the experiments to measure the current runner. Timings and applicability are discussed in the [pilot results](docs/research-notes.md).
 
 - [Reproduce the two experiments and the historical comparison](datasets/README.md)
 - [Understand the selection algorithm and its fallbacks](docs/algorithm.md)
