@@ -56,6 +56,8 @@ For one strategy, use `metrics.selected_total_seconds` in a comparison or `total
 
 ## Reference results
 
+The [ETL efficiency verification](docs/etl-efficiency.md) records the current runner's 61 passing self-tests, five mutation checks and repeated comparisons against the previous runner. It includes full timing boundaries and cases where file selection remained slower.
+
 For the historical more-itertools change, line selection ran 4 of 660 pytest items. File selection ran 538. In the separate mutation experiments, both strategies detected all four faults that the full suites detected. One Colorama mutation survived the full suite. Those historical timings describe the runner used for the pilot; rerun the experiments to measure the current runner. Timings and applicability are discussed in the [pilot results](docs/research-notes.md).
 
 - [Reproduce the two experiments and the historical comparison](datasets/README.md)
