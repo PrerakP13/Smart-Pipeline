@@ -32,6 +32,24 @@ Open `.testmind/comparison.json`. Under `strategies.line`, `selected` lists the 
 
 Omit `--target` on `run` or `compare` to inspect the subject's current working tree. Include the subject's test dependencies in the active environment. Keep generated maps and reports outside the subject or in an ignored directory. The selector reads Git changes across all nonignored paths.
 
+Python subprocesses now contribute coverage to the test that launched them. **Rebuild old baselines after updating:** older snapshots omit these dependencies and are rejected rather than silently reused. Supported children must use the same Python environment, inherit coverage variables, and finish normally. The collector temporarily installs coverage.py's startup hook in the active virtual environment; its coverage configuration and data files live outside the subject. See the [coverage limits](docs/algorithm.md#limits).
+
+## ETL Customer regression checks
+
+The [ETL mutation configuration](experiments/configurations/etl_customer_mutations.json) covers boolean IDs, email case, phone normalization, email validation and transaction persistence in `PrerakP13/ETL_Customer` at commit `8c8ff5414f808642394566a96f4e8a877313663a`. From this repository, after installing both projects' requirements into the same Python 3.12 environment:
+
+```sh
+etl_results=$(mktemp -d)
+.venv/bin/python -m experiments.run_mutations \
+  --repo "$HOME/ETL_Customer" \
+  --base 8c8ff5414f808642394566a96f4e8a877313663a \
+  --db "$etl_results/coverage.sqlite" \
+  --config experiments/configurations/etl_customer_mutations.json \
+  --output "$etl_results/mutations.json"
+```
+
+This captures the full passing control and applies each intentional fault in a separate temporary checkout. The original ETL files are preserved. `summary` reports whether each strategy detects each fault; individual `trials[].comparison.strategies` also report missed failing tests and total selective time. Intentional test failures are expected. An experiment can detect a fault while still missing another failing test, and it can reduce test counts without saving time.
+
 ## Reference results
 
 For the historical more-itertools change, line selection ran 4 of 660 pytest items. File selection ran 538. In the separate mutation experiments, both strategies detected all four faults that the full suites detected. One Colorama mutation survived the full suite. Timings and applicability are discussed in the [pilot results](docs/research-notes.md).

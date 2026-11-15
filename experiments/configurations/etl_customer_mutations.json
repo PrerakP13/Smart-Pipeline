@@ -1,0 +1,34 @@
+{
+  "mutations": [
+    {
+      "id": "boolean-id",
+      "path": "src/validate.py",
+      "before": "if isinstance(value, bool):\n        return None",
+      "after": "if isinstance(value, bool):\n        return int(value)"
+    },
+    {
+      "id": "email-case",
+      "path": "src/transform.py",
+      "before": "value.lower()",
+      "after": "value.upper()"
+    },
+    {
+      "id": "phone-normalization",
+      "path": "src/transform.py",
+      "before": "re.sub(r\"[\\s().-]\", \"\", value)",
+      "after": "value"
+    },
+    {
+      "id": "email-validation",
+      "path": "src/validate.py",
+      "before": "EMAIL_PATTERN.fullmatch(row[3]) is not None",
+      "after": "True"
+    },
+    {
+      "id": "transaction-persistence",
+      "path": "src/load.py",
+      "before": "with engine.begin() as connection:",
+      "after": "with engine.connect() as connection:"
+    }
+  ]
+}

@@ -22,9 +22,15 @@ def capture_coverage(repo: Path) -> tuple[dict[str, dict[str, set[int]]], dict[s
     worker = Path(__file__).with_name("_coverage_worker.py")
     with TemporaryDirectory(prefix="testmind-coverage-") as temp:
         report = Path(temp, "coverage.json")
+        env = subject_env(root)
+        # Do not let an outer coverage run auto-start in our worker. The worker
+        # creates its own temporary configuration and child-process context.
+        for name in ("COVERAGE_PROCESS_START", "COVERAGE_PROCESS_CONFIG",
+                     "COVERAGE_RCFILE", "COVERAGE_FILE", "TESTMIND_COVERAGE_CONTEXT"):
+            env.pop(name, None)
         run = subprocess.run(
             [sys.executable, str(worker), str(report)],
-            cwd=root, env=subject_env(root), capture_output=True, text=True, errors="replace",
+            cwd=root, env=env, capture_output=True, text=True, errors="replace",
         )
         if run.returncode != 0:
             raise RuntimeError(

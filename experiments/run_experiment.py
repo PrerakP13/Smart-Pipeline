@@ -18,7 +18,7 @@ import pytest
 from src.change_detector import detect_changes, git_root, resolve_commit
 from src.coverage_analyzer import capture_coverage
 from src.evaluator import evaluate
-from src.test_mapper import load_map, save_map
+from src.test_mapper import CAPTURE_VERSION, load_map, save_map
 from src.test_runner import collect_tests, run_tests
 from src.test_selector import select_tests
 
@@ -76,7 +76,8 @@ def baseline(repo: Path, base: str, db: Path) -> dict:
     for files in mapping.values():
         mapped_files.update(files)
     return {
-        "schema_version": 1, "base": sha, "environment": environment(),
+        "schema_version": 1, "capture_version": CAPTURE_VERSION,
+        "base": sha, "environment": environment(),
         "test_count": len(mapping), "baseline_seconds": perf_counter() - start,
         "mapped_python_files": len(mapped_files),
     }

@@ -8,8 +8,15 @@ from pathlib import Path
 CoverageMap = dict[str, dict[str, set[int]]]
 SharedLines = dict[str, set[int]]
 
+# Version 2 includes Python subprocess execution. Older captures can silently
+# omit CLI dependencies, even when the subject revision has not changed.
+CAPTURE_VERSION = 2
+
 _TABLES = (
     "CREATE TABLE IF NOT EXISTS snapshots (revision TEXT PRIMARY KEY)",
+    """CREATE TABLE IF NOT EXISTS capture_versions (
+           revision TEXT PRIMARY KEY, version INTEGER NOT NULL,
+           FOREIGN KEY (revision) REFERENCES snapshots ON DELETE CASCADE)""",
     """CREATE TABLE IF NOT EXISTS tests (
            revision TEXT, nodeid TEXT, PRIMARY KEY (revision, nodeid),
            FOREIGN KEY (revision) REFERENCES snapshots ON DELETE CASCADE)""",
@@ -37,6 +44,7 @@ def save_map(path: Path, commit: str, mapping: CoverageMap, shared: SharedLines)
             db.execute(sql)
         db.execute("DELETE FROM snapshots WHERE revision = ?", (commit,))
         db.execute("INSERT INTO snapshots VALUES (?)", (commit,))
+        db.execute("INSERT INTO capture_versions VALUES (?, ?)", (commit, CAPTURE_VERSION))
         db.executemany("INSERT INTO tests VALUES (?, ?)",
                        ((commit, nodeid) for nodeid in mapping))
         # A row per edge keeps the database compact and preserves empty line sets.
@@ -59,6 +67,16 @@ def load_map(path: Path, commit: str) -> tuple[CoverageMap, SharedLines]:
         db.execute("BEGIN")
         if not db.execute("SELECT 1 FROM snapshots WHERE revision = ?", (commit,)).fetchone():
             raise ValueError(f"No coverage snapshot for baseline commit {commit}")
+        versions = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'capture_versions'"
+        ).fetchone()
+        if not versions or db.execute(
+            "SELECT version FROM capture_versions WHERE revision = ?", (commit,)
+        ).fetchone() != (CAPTURE_VERSION,):
+            raise ValueError(
+                "Coverage snapshot uses an incompatible collector version. "
+                "Run the baseline command again to capture Python subprocess coverage."
+            )
         mapping: CoverageMap = {nodeid: {} for (nodeid,) in
                                 db.execute("SELECT nodeid FROM tests WHERE revision = ?", (commit,))}
         for nodeid, filename, lines in db.execute(

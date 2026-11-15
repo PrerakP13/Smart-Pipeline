@@ -1,7 +1,9 @@
-"""Private single-process pytest worker for baseline line attribution."""
+"""Attribute pytest and Python child-process coverage to baseline test IDs."""
 
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 
 if __name__ == "__main__" and sys.path[0] == str(Path(__file__).resolve().parent):
@@ -10,6 +12,9 @@ if __name__ == "__main__" and sys.path[0] == str(Path(__file__).resolve().parent
 
 from coverage import Coverage
 import pytest
+
+
+CONTEXT_VARIABLE = "TESTMIND_COVERAGE_CONTEXT"
 
 
 class CoveragePlugin:
@@ -24,6 +29,9 @@ class CoveragePlugin:
         previous = self.current
         self.current = context
         self.tracer.switch_context(context)
+        # A child inherits this value at launch, even if it finishes after the
+        # parent switches context. Its coverage config uses it as static context.
+        os.environ[CONTEXT_VARIABLE] = context
         return previous
 
     def pytest_configure(self, config):
@@ -73,13 +81,42 @@ class CoveragePlugin:
 
 def collect(report_path):
     root = Path.cwd().resolve()
-    tracer = Coverage(
-        source=[str(root)], omit=["*/site-packages/*", "*/dist-packages/*"],
-        config_file=False, data_file=None,
+    report_path = report_path.resolve()
+    config = report_path.with_suffix(".toml")
+    # TOML strings are JSON-compatible. Escape dollars in literal paths because
+    # coverage also expands environment variables inside its configuration.
+    def literal(path):
+        return json.dumps(str(path).replace("$", "$$"), ensure_ascii=False)
+    config.write_text(
+        "[tool.coverage.run]\n"
+        f"source = [{literal(root)}]\n"
+        'omit = ["*/site-packages/*", "*/dist-packages/*"]\n'
+        f"data_file = {literal(report_path.parent / '.coverage')}\n"
+        "parallel = true\n"
+        'patch = ["subprocess"]\n'
+        f'context = "${{{CONTEXT_VARIABLE}}}"\n',
+        encoding="utf-8",
     )
+    os.environ[CONTEXT_VARIABLE] = ""
+    tracer = Coverage(config_file=str(config))
     plugin = CoveragePlugin(tracer)
     tracer.start()
+    # The native patch installs a temporary startup hook in this Python
+    # environment. Its serialized config freezes the initial empty context, so
+    # children must read our config using their launch-time context instead.
+    os.environ.pop("COVERAGE_PROCESS_CONFIG", None)
+    os.environ["COVERAGE_PROCESS_START"] = str(config)
     try:
+        probe = subprocess.run(
+            [sys.executable, "-c",
+             "from coverage import Coverage; raise SystemExit(Coverage.current() is None)"],
+            capture_output=True, text=True,
+        )
+        if probe.returncode:
+            raise RuntimeError(
+                "Python subprocess coverage could not start. Use a writable virtual "
+                "environment with coverage installed.\n" + probe.stderr
+            )
         status = pytest.main(["-q", "--rootdir=.", "-p", "no:cacheprovider"], plugins=[plugin])
     finally:
         tracer.stop()
@@ -94,6 +131,8 @@ def collect(report_path):
 
     tests = {nodeid: {} for nodeid in plugin.nodeids}
     shared = {}
+    tracer.save()
+    tracer.combine(data_paths=[str(report_path.parent)])
     data = tracer.get_data()
     for filename in sorted(data.measured_files()):
         path = Path(filename)

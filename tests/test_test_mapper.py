@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from src.test_mapper import load_map, save_map
@@ -38,3 +40,30 @@ def test_missing_database_load_has_no_side_effects(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_map(path, "base")
     assert not path.exists()
+
+
+def test_legacy_snapshots_require_individual_recapture(tmp_path):
+    path = tmp_path / "legacy.sqlite"
+    old = {"test_cli": {"test_cli.py": {2}}}
+    for commit in ("a", "b"):
+        save_map(path, commit, old, {})
+    # The old database schema had no collector version and no child coverage.
+    with sqlite3.connect(path) as db:
+        db.execute("DROP TABLE capture_versions")
+    with pytest.raises(ValueError, match="baseline command again"):
+        load_map(path, "a")
+
+    captured = {"test_cli": {"test_cli.py": {2}, "app.py": {8}}}
+    save_map(path, "a", captured, {})
+    assert load_map(path, "a") == (captured, {})
+    with pytest.raises(ValueError, match="baseline command again"):
+        load_map(path, "b")
+
+
+def test_incompatible_collector_version_is_rejected(tmp_path):
+    path = tmp_path / "future.sqlite"
+    save_map(path, "a", {}, {})
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE capture_versions SET version = 999")
+    with pytest.raises(ValueError, match="incompatible collector"):
+        load_map(path, "a")
