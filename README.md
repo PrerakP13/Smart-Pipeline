@@ -52,6 +52,21 @@ etl_results=$(mktemp -d)
 
 This captures the full passing control and applies each intentional fault in a separate temporary checkout. The original ETL files are preserved. `summary` reports whether each strategy detects each fault; individual `trials[].comparison.strategies` also report missed failing tests and total selective time. Intentional test failures are expected. An experiment can detect a fault while still missing another failing test, and it can reduce test counts without saving time.
 
+### PowerShell launcher
+
+[`etl.ps1`](etl.ps1) wraps the same Python baseline and comparison commands. With Python 3.12, Git, and both projects' test dependencies installed, run from PowerShell in this repository:
+
+```powershell
+./etl.ps1 baseline -EtlRepo "C:\projects\ETL_Customer"
+./etl.ps1 compare -EtlRepo "C:\projects\ETL_Customer"
+```
+
+Replace the path with your ETL checkout. The defaults are `$HOME/ETL_Customer` and baseline `8c8ff5414f808642394566a96f4e8a877313663a`. The launcher prefers this repository's `.venv` Python on Windows or macOS/Linux, then `python` on PATH. Use `-Python "C:\path\to\python.exe"` to choose another interpreter. macOS/Linux users with PowerShell installed can invoke it from their shell with `pwsh -File ./etl.ps1 baseline`, then `pwsh -File ./etl.ps1 compare`.
+
+Baseline saves `.testmind/etl.sqlite` and `.testmind/etl-baseline.json`; compare saves `.testmind/etl-comparison.json`. These default paths are relative to the launcher. Override `-Base`, `-Database`, `-Report`, or `-Strategy file|line|both` as needed; pass the same base and database to both actions. Caller-supplied relative paths are resolved from the calling directory. Compare uses the ETL working tree unless you supply `-Target <commit>`. It does not inject a mutation: on an unchanged tree, selection can be empty. Use the mutation command above for the five controlled faults.
+
+The launcher prints per-strategy metrics and the entire comparison time, and propagates command failures. As with the Python comparison command, a completed comparison returns success even when subject tests fail; inspect the reported failures and missed-failure metrics.
+
 For one strategy, use `metrics.selected_total_seconds` in a comparison or `total_seconds` in a `run` report. These include Git and map preparation, selection, pytest startup, collection and execution. `comparison_seconds` measures preparation plus the full run and every requested strategy; it excludes baseline capture and creation of an outer target checkout. `campaign_seconds` includes the baseline, temporary checkouts and all mutation trials. These measurements end before the final JSON report is written. See the [timing definitions](docs/experiment-plan.md) before comparing strategy costs with an entire experiment's duration.
 
 ## Reference results
